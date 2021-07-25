@@ -20,6 +20,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
+import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.content.IntentSender
 import android.net.Uri
@@ -60,9 +61,16 @@ class HuntMainActivity : AppCompatActivity() {
     private lateinit var geofencingClient: GeofencingClient
     private lateinit var viewModel: GeofenceViewModel
 
-    // TODO: Step 2 add in variable to check if device is running Q or later
+    // add in variable to check if device is running Q or later
     private val runningQOrLater = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
-    // TODO: Step 8 add in a pending intent
+
+    // add in a pending intent to handle the geofence transition
+    private val geofencePendingIntent: PendingIntent by lazy {
+        // The broadcast receiver is how Android apps can send or receive broadcast messages from the Android system and other Android apps
+        val intent = Intent(this, GeofenceBroadcastReceiver::class.java)
+        intent.action = ACTION_GEOFENCE_EVENT
+        PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +79,8 @@ class HuntMainActivity : AppCompatActivity() {
             this)).get(GeofenceViewModel::class.java)
         binding.viewmodel = viewModel
         binding.lifecycleOwner = this
-        // TODO: Step 9 instantiate the geofencing client
+        // instantiate the geofencing client -> the main entry point for interacting with geofencing APIs.
+        geofencingClient = LocationServices.getGeofencingClient(this)
 
         // Create channel for notifications
         createChannel(this )
@@ -155,7 +164,7 @@ class HuntMainActivity : AppCompatActivity() {
      */
     override fun onDestroy() {
         super.onDestroy()
-        removeGeofences()
+        removeGeoFences()
     }
 
     /**
@@ -278,19 +287,72 @@ class HuntMainActivity : AppCompatActivity() {
     /*
      * Adds a Geofence for the current clue if needed, and removes any existing Geofence. This
      * method should be called after the user has granted the location permission.  If there are
-     * no more geofences, we remove the geofence and let the viewmodel know that the ending hint
+     * no more geoFences, we remove the geofence and let the viewModel know that the ending hint
      * is now "active."
      */
+    @SuppressLint("MissingPermission")
     private fun addGeofenceForClue() {
         // TODO: Step 10 add in code to add the geofence
+        // if there's already an active geoFences, you shouldn't add another.
+        if (viewModel.geofenceIsActive()) return
+        // find out the current geoFence by index - If the index is higher than the number of landmarks we have, it means the user has found all the treasures.
+        // Remove geoFences, call geofenceActivated on the viewModel, then return.
+        val currentGeofenceIndex = viewModel.nextGeofenceIndex()
+        if(currentGeofenceIndex >= GeofencingConstants.NUM_LANDMARKS) {
+            removeGeoFences()
+            viewModel.geofenceActivated()
+            return
+        }
+        // Once you have the index and know it is valid, get the data surrounding the geofence.
+        val currentGeofenceData = GeofencingConstants.LANDMARK_DATA[currentGeofenceIndex]
+        // Build the geofence using the geofence builder, the information in currentGeofenceData, like the id and the latitude and longitude. Set the expiration duration using the constant set in GeofencingConstants.
+        val geofence = Geofence.Builder()
+            .setRequestId(currentGeofenceData.id)
+            .setCircularRegion(currentGeofenceData.latLong.latitude,
+                currentGeofenceData.latLong.longitude,
+                GeofencingConstants.GEOFENCE_RADIUS_IN_METERS
+            )
+            // Set the transition type to GEOFENCE_TRANSITION_ENTER. Finally, build the geofence.
+            .setExpirationDuration(GeofencingConstants.GEOFENCE_EXPIRATION_IN_MILLISECONDS)
+            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
+            .build()
+        // Build the geofence request. Set the initial trigger to INITIAL_TRIGGER_ENTER, add the geofence you just built and then build.
+        val geofencingRequest = GeofencingRequest.Builder()
+            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .addGeofence(geofence)
+            .build()
+        // Call removeGeoFences() on the geofencingClient to remove any geoFences already associated to the pending intent
+        geofencingClient.removeGeofences(geofencePendingIntent)?.run {
+            addOnCompleteListener {
+                geofencingClient.addGeofences(geofencingRequest, geofencePendingIntent)?.run {
+                    // If adding the geoFences is successful, let the user know through a toast that they were successful.
+                    addOnSuccessListener {
+                        Toast.makeText(this@HuntMainActivity, R.string.geofences_added,
+                            Toast.LENGTH_SHORT)
+                            .show()
+                        Log.e("Add Geofence", geofence.requestId)
+                        viewModel.geofenceActivated()
+                    }
+                    // If adding the geoFences fails, present a toast letting the user know that there was an issue in adding the geoFences.
+                    addOnFailureListener {
+                        Toast.makeText(this@HuntMainActivity, R.string.geofences_not_added,
+                            Toast.LENGTH_SHORT).show()
+                        if ((it.message != null)) {
+                            Log.w(TAG, it.message!!)
+                        }
+                    }
+                }
+            }
+        }
+
     }
 
     /**
-     * Removes geofences. This method should be called after the user has granted the location
+     * Removes geoFences. This method should be called after the user has granted the location
      * permission.
      */
-    private fun removeGeofences() {
-        // TODO: Step 12 add in code to remove the geofences
+    private fun removeGeoFences() {
+     // TODO: Step 12 add in code to remove the geoFences
     }
     companion object {
         internal const val ACTION_GEOFENCE_EVENT =
