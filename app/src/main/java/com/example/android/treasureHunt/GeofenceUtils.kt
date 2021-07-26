@@ -76,7 +76,17 @@ internal object GeofencingConstants {
            "union_square",
             R.string.union_square_hint,
             R.string.union_square_location,
-            LatLng(37.788151, -122.407570))
+            LatLng(37.788151, -122.407570)),
+
+        LandmarkDataObject(
+            "silicon_valley",
+            R.string.google_hint,
+            R.string.google_location,
+            LatLng(37.42221043046037, -122.08405751653282)
+
+
+        )
+
     )
 
     val NUM_LANDMARKS = LANDMARK_DATA.size
