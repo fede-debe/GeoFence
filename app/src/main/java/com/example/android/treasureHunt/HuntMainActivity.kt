@@ -349,10 +349,29 @@ class HuntMainActivity : AppCompatActivity() {
 
     /**
      * Removes geoFences. This method should be called after the user has granted the location
-     * permission.
+     * permission. When you no longer need geoFences, it is the best practice to remove them in
+     * order to save battery and CPU cycles to stop monitoring. This method is called into the
+     * onDestroy method of the app
      */
     private fun removeGeoFences() {
      // TODO: Step 12 add in code to remove the geoFences
+        // Initially, check if foreground permissions have been approved, if they have not then return because if they have not means that there isn't a GeoFence.
+        if (!foregroundAndBackgroundLocationPermissionApproved()) {
+            return
+        }
+        // Call removeGeoFences() on the geofencingClient and pass in the geofencePendingIntent.
+        geofencingClient.removeGeofences(geofencePendingIntent)?.run {
+            // Add an onSuccessListener(), update the user that the geoFences were successfully removed through a toast.
+            addOnSuccessListener {
+                Log.d(TAG, getString(R.string.geofences_removed))
+                Toast.makeText(applicationContext, R.string.geofences_removed, Toast.LENGTH_SHORT)
+                    .show()
+            }
+            // Add an onFailureListener() where you log that the geoFences weren't removed.
+            addOnFailureListener {
+                Log.d(TAG, getString(R.string.geofences_not_removed))
+            }
+        }
     }
     companion object {
         internal const val ACTION_GEOFENCE_EVENT =
